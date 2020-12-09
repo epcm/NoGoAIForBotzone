@@ -118,7 +118,7 @@ void State::getAviliablePos()
 }
 void State::generateNextState()
 {
-    if (available_choices.size() == 0) //修改
+    if(available_choices.size()==0)
         return;
     int i = rand() % available_choices.size();
     Action a = available_choices[i];
@@ -150,10 +150,10 @@ Node *bestChild(Node *node, bool is_explor)
     double C = 0.0;
     if (is_explor)
         C = 1 / sqrt(2);
-    for (int i = 0; i < (int)(node->children.size()); i++) //Key!!!!加了1防止除0
+    for (int i = 0; i < (int)node->children.size(); i++)
     {
         Node *p = node->children[i];
-        double score = p->quality_value / (p->visit_times + 1) + 2 * C * sqrt(log(2 * node->visit_times + 1) / (p->visit_times + 1));
+        double score = p->quality_value / (p->visit_times+1) + 2 * C * sqrt(log(2 * node->visit_times+1) / (p->visit_times+1));
         if (score > max_score)
         {
             max_score = score;
@@ -297,7 +297,7 @@ int main()
         /*if(clock()%50==0)
         {
             cout << endl;
-            for(auto p:node->children)
+            for(auto p:node->ch ildren)
                 cout << p->quality_value << '&' << p->visit_times << ' ';
         }*/
         //cout << "cal\n";
@@ -343,9 +343,9 @@ int main()
     //sprintf(buffer, "MCTS节点数:%d,当前预估胜率:%.3f", count, ((double)(root.children[maxI]->q)) / ((double)root.children[maxI]->n));
     //ret["debug"] = buffer;
     Json::FastWriter writer;
-    char buffer[4096];
-    sprintf(buffer, "MCTS节点数:%d,当前预估胜率:%.3f", count, ((double)(best_child->quality_value)) / ((double)best_child->visit_times) + 0.5);
-    ret["debug"] = buffer;
+    //char buffer[4096];
+    //sprintf(buffer, "MCTS节点数:%d,当前预估胜率:%.3f", count, ((double)(best_child->quality_value)) / ((double)best_child->visit_times) + 0.5);
+    //ret["debug"] = buffer;
     cout << writer.write(ret) << endl;
     //system("pause");
     return 0;

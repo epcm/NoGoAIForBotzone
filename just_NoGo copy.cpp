@@ -120,7 +120,8 @@ void State::generateNextState()
 {
     if (available_choices.size() == 0) //修改
         return;
-    int i = rand() % available_choices.size();
+    int n = available_choices.size();
+    int i = rand() % n;
     Action a = available_choices[i];
     current_board[a.x][a.y] = col;
     col = -col;
@@ -201,6 +202,11 @@ Node *treePolicy(Node *node)
 double defaultPolicy(Node *node)
 {
     State simu_state = node->state;
+    simu_state.col = node->state.col;
+    for (int i = 0; i < 9; i++)
+        for (int j = 0; j < 9; j++)
+            simu_state.current_board[i][j] = node->state.current_board[i][j];
+    simu_state.getAviliablePos();
     int curCol = simu_state.col;
     while (!simu_state.isTerminal())
         simu_state.generateNextState();

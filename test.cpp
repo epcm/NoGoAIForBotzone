@@ -2,20 +2,11 @@
 #include <vector>
 using namespace std;
 
-class Node
-{
-public:
-    Node* pParent = this;
-    vector<Node*> pChildren;
-    int value;
-};
-struct action
-{
-    int x;
-    int y;
-};
 int main()
 {
-    action a = {1, 2};
-    cout << a.x << ' ' << a.y;
+    vector<int> a;
+    a.push_back(11);
+    a.push_back(2);
+    a.erase(1);
+    cout << a[0];
 }
