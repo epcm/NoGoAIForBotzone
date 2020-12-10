@@ -11,7 +11,7 @@
 #include <vector>
 using namespace std;
 
-#define TIME_OUT_SET 0.93
+#define TIME_OUT_SET 0.95
 
 int board[9][9] = {0};
 int count = 0;
@@ -44,8 +44,23 @@ public:
     void generateNextState(); //随机生成到下一状态
     bool dfsAir(int fx, int fy);
     bool judgeAvailable(int fx, int fy);
+    double quick_evaluate();
 };
-
+double State::quick_evaluate()
+{
+    int n1 = 0, n2 = 0;
+    for (int i = 0; i < 9; i++)
+        for (int j = 0; j < 9; j++)
+            if (judgeAvailable(i, j))
+                n1++;
+    col = -col;
+    for (int i = 0; i < 9; i++)
+        for (int j = 0; j < 9; j++)
+            if (judgeAvailable(i, j))
+                n2++;
+    col = -col;
+    return (n1 - n2) / 81.0;
+}
 bool State::dfsAir(int fx, int fy)
 {
     dfs_air_visit[fx][fy] = true;
@@ -146,7 +161,7 @@ bool Node::isAllExpanded()
 //使用UCB算法，权衡exploration和exploitation后选择得分最高的子节点，注意如果是预测阶段直接选择当前Q值得分最高的。
 Node *bestChild(Node *node, bool is_explor)
 {
-    double max_score = 2e-50;
+    double max_score = -2e50;//参数开始设成了2e-50，难怪会返回NULL
     Node *best_child = NULL;
     double C = 0.0;
     if (is_explor)
@@ -193,7 +208,11 @@ Node *treePolicy(Node *node)
         return node;
     }
     if (node->isAllExpanded())
-        return treePolicy(bestChild(node, true));
+    {
+        Node *p = bestChild(node, true);
+        return treePolicy(p);
+    }
+
     else
         return expand(node);
 }
@@ -214,6 +233,7 @@ double defaultPolicy(Node *node)
         return -1;
     else
         return 1;
+    //return node->state.quick_evaluate();
 }
 
 //蒙特卡洛树搜索的Backpropagation阶段，输入前面获取需要expend的节点和新执行Action的reward，反馈给expend节点和上游所有节点并更新对应数据。
