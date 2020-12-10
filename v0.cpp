@@ -2,7 +2,7 @@
 // MCTS策略
 // 作者：AAA
 // 游戏信息：http://www.botzone.org/games#NoGo
-//v4 继承自v3 尝试在defaultPolicy中加入几步随机过程
+//v0 MCTS传统实现，使用随机模拟作为defaultPolicy
 #include "jsoncpp/json.h"
 #include <cstdio>
 #include <cstring>
@@ -13,7 +13,6 @@
 using namespace std;
 
 #define TIME_OUT_SET 0.98
-#define RANDOM_DEPTH 1
 
 int board[9][9] = {0};
 int node_count = 0;
@@ -61,7 +60,7 @@ double State::quickEvaluate()
             if (judgeAvailable(i, j))
                 n2++;
     col = -col;
-    return (n2 - n1) / 81.0;
+    return (n1 - n2) / 81.0;
 }
 bool State::dfsAir(int fx, int fy)
 {
@@ -163,7 +162,7 @@ bool Node::isAllExpanded()
 //使用UCB算法，权衡exploration和exploitation后选择得分最高的子节点，注意如果是预测阶段直接选择当前Q值得分最高的。
 Node *bestChild(Node *node, bool is_explor)
 {
-    double max_score = -2e50; //参数开始设成了2e-50，难怪会返回NULL
+    double max_score = -2e50;//参数开始设成了2e-50，难怪会返回NULL
     Node *best_child = NULL;
     double C = 0.0;
     if (is_explor)
@@ -184,9 +183,9 @@ Node *bestChild(Node *node, bool is_explor)
 Node *expand(Node *node)
 {
     Node *new_node = new Node;
-    int i = rand() % node->state.available_choices.size();
-    Action a = node->state.available_choices[i];
-    node->state.available_choices.erase(node->state.available_choices.begin() + i); //清除已经展开的节点
+    //int i = rand() % node->state.available_choices.size();
+    Action a = node->state.available_choices[0];
+    node->state.available_choices.erase(node->state.available_choices.begin()); //清除已经展开的节点
     new_node->quality_value = 0.0;
     new_node->visit_times = 0;
     new_node->state.col = -node->state.col;
@@ -223,14 +222,18 @@ Node *treePolicy(Node *node)
 double defaultPolicy(Node *node)
 {
     State simu_state = node->state;
-    //int curCol = simu_state.col;
-    int simu_count = 0;
-    while (simu_count < RANDOM_DEPTH && !simu_state.available_choices.empty())
-    {
+    simu_state.col = node->state.col;
+    for (int i = 0; i < 9; i++)
+        for (int j = 0; j < 9; j++)
+            simu_state.current_board[i][j] = node->state.current_board[i][j];
+    simu_state.getAviliableAction();
+    int curCol = simu_state.col;
+    while (!simu_state.isTerminal())
         simu_state.generateNextState();
-        simu_count++;
-    }
-    return simu_state.quickEvaluate();
+    if (simu_state.col == curCol)
+        return 1;
+    else
+        return -1;
     //return node->state.quickEvaluate();
 }
 

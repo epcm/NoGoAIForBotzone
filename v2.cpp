@@ -2,18 +2,19 @@
 // MCTS策略
 // 作者：AAA
 // 游戏信息：http://www.botzone.org/games#NoGo
-//v4 继承自v3 尝试在defaultPolicy中加入几步随机过程
+//v2 使用估值函数改变节点创造顺序，使高评分节点优先被创造
+//搜索节点数明显偏低，效果不好
 #include "jsoncpp/json.h"
 #include <cstdio>
 #include <cstring>
 #include <iostream>
 #include <random>
 #include <string>
+#include <algorithm>
 #include <vector>
 using namespace std;
 
 #define TIME_OUT_SET 0.98
-#define RANDOM_DEPTH 1
 
 int board[9][9] = {0};
 int node_count = 0;
@@ -31,7 +32,12 @@ struct Action
 {
     int x = -1;
     int y = -1;
+    double value = 0;
 };
+bool cmp(Action a, Action b)
+{
+    return a.value > b.value;
+}
 
 class State
 {
@@ -47,6 +53,7 @@ public:
     bool dfsAir(int fx, int fy);
     bool judgeAvailable(int fx, int fy);
     double quickEvaluate();
+    double actionEvaluate(Action a);
 };
 double State::quickEvaluate()
 {
@@ -62,6 +69,15 @@ double State::quickEvaluate()
                 n2++;
     col = -col;
     return (n2 - n1) / 81.0;
+}
+double State::actionEvaluate(Action a)
+{
+    current_board[a.x][a.y] = col;
+    col = -col;
+    double x = quickEvaluate(); //对面下棋的输面，越大越好
+    current_board[a.x][a.y] = 0;
+    col = -col;
+    return x;
 }
 bool State::dfsAir(int fx, int fy)
 {
@@ -130,6 +146,7 @@ void State::getAviliableAction()
                 Action a;
                 a.x = i;
                 a.y = j;
+                a.value = actionEvaluate(a);
                 available_choices.push_back(a);
             }
 }
@@ -144,7 +161,6 @@ void State::generateNextState()
     col = -col;
     getAviliableAction();
 }
-
 class Node
 {
 public:
@@ -163,7 +179,7 @@ bool Node::isAllExpanded()
 //使用UCB算法，权衡exploration和exploitation后选择得分最高的子节点，注意如果是预测阶段直接选择当前Q值得分最高的。
 Node *bestChild(Node *node, bool is_explor)
 {
-    double max_score = -2e50; //参数开始设成了2e-50，难怪会返回NULL
+    double max_score = -2e50;//参数开始设成了2e-50，难怪会返回NULL
     Node *best_child = NULL;
     double C = 0.0;
     if (is_explor)
@@ -184,9 +200,10 @@ Node *bestChild(Node *node, bool is_explor)
 Node *expand(Node *node)
 {
     Node *new_node = new Node;
-    int i = rand() % node->state.available_choices.size();
-    Action a = node->state.available_choices[i];
-    node->state.available_choices.erase(node->state.available_choices.begin() + i); //清除已经展开的节点
+    //int i = rand() % node->state.available_choices.size();
+    sort(node->state.available_choices.begin(), node->state.available_choices.end(), cmp);
+    Action a = node->state.available_choices[0];
+    node->state.available_choices.erase(node->state.available_choices.begin()); //清除已经展开的节点
     new_node->quality_value = 0.0;
     new_node->visit_times = 0;
     new_node->state.col = -node->state.col;
@@ -222,16 +239,20 @@ Node *treePolicy(Node *node)
 //Simulation阶段，从当前节点快速落子模拟运算至终局，返回reward
 double defaultPolicy(Node *node)
 {
-    State simu_state = node->state;
-    //int curCol = simu_state.col;
-    int simu_count = 0;
-    while (simu_count < RANDOM_DEPTH && !simu_state.available_choices.empty())
-    {
+    /*State simu_state = node->state;
+    simu_state.col = node->state.col;
+    for (int i = 0; i < 9; i++)
+        for (int j = 0; j < 9; j++)
+            simu_state.current_board[i][j] = node->state.current_board[i][j];
+    simu_state.getAviliableAction();
+    int curCol = simu_state.col;
+    while (!simu_state.isTerminal())
         simu_state.generateNextState();
-        simu_count++;
-    }
-    return simu_state.quickEvaluate();
-    //return node->state.quickEvaluate();
+    if (simu_state.col == curCol)
+        return 1;
+    else
+        return -1;*/
+    return node->state.quickEvaluate();
 }
 
 //蒙特卡洛树搜索的Backpropagation阶段，输入前面获取需要expend的节点和新执行Action的reward，反馈给expend节点和上游所有节点并更新对应数据。

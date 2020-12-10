@@ -2,7 +2,7 @@
 // MCTS策略
 // 作者：AAA
 // 游戏信息：http://www.botzone.org/games#NoGo
-//v4 继承自v3 尝试在defaultPolicy中加入几步随机过程
+//v6 继承自v3 将bestchild改为最多遍历
 #include "jsoncpp/json.h"
 #include <cstdio>
 #include <cstring>
@@ -13,7 +13,6 @@
 using namespace std;
 
 #define TIME_OUT_SET 0.98
-#define RANDOM_DEPTH 1
 
 int board[9][9] = {0};
 int node_count = 0;
@@ -23,7 +22,7 @@ bool dfs_air_visit[9][9] = {0};
 const int cx[] = {-1, 0, 1, 0};
 const int cy[] = {0, -1, 0, 1};
 
-bool inBorder(int x, int y) { return x >= 0 && y >= 0 && x < 9 && y < 9; }
+inline bool inBorder(int x, int y) { return x >= 0 && y >= 0 && x < 9 && y < 9; }
 
 /*******************MCTS实现********************/
 
@@ -187,12 +186,13 @@ Node *expand(Node *node)
     int i = rand() % node->state.available_choices.size();
     Action a = node->state.available_choices[i];
     node->state.available_choices.erase(node->state.available_choices.begin() + i); //清除已经展开的节点
-    new_node->quality_value = 0.0;
-    new_node->visit_times = 0;
+    *new_node = *node;
     new_node->state.col = -node->state.col;
+    /*new_node->quality_value = 0.0;
+    new_node->visit_times = 0;
     for (int i = 0; i < 9; i++)
         for (int j = 0; j < 9; j++)
-            new_node->state.current_board[i][j] = node->state.current_board[i][j];
+            new_node->state.current_board[i][j] = node->state.current_board[i][j];*/
     new_node->state.current_board[a.x][a.y] = node->state.col;
     new_node->state.getAviliableAction();
     new_node->parent = node;
@@ -204,7 +204,7 @@ Node *treePolicy(Node *node)
 {
     //Selection与Expansion阶段。传入当前需要开始搜索的节点，根据UCB1值返回最好的需要expend的节点，注意如果节点是叶子结点直接返回。
     //基本策略是先找当前未选择过的子节点，如果有多个则随机选。如果都选择过就找权衡过exploration/exploitation的UCB值最大的，如果UCB值相等则随机选。
-    if (node->state.isTerminal()) //当treePolicy到达叶节点时(node->state.available_choices.empty() && node->children.empty())
+    if (node->state.available_choices.empty() && node->children.empty()) //当treePolicy到达叶节点时(node->state.available_choices.empty() && node->children.empty())
     {
         //cout << "leaf";
         return node;
@@ -220,18 +220,22 @@ Node *treePolicy(Node *node)
 }
 
 //Simulation阶段，从当前节点快速落子模拟运算至终局，返回reward
-double defaultPolicy(Node *node)
+inline double defaultPolicy(Node *node)
 {
-    State simu_state = node->state;
-    //int curCol = simu_state.col;
-    int simu_count = 0;
-    while (simu_count < RANDOM_DEPTH && !simu_state.available_choices.empty())
-    {
+    /*State simu_state = node->state;
+    simu_state.col = node->state.col;
+    for (int i = 0; i < 9; i++)
+        for (int j = 0; j < 9; j++)
+            simu_state.current_board[i][j] = node->state.current_board[i][j];
+    simu_state.getAviliableAction();
+    int curCol = simu_state.col;
+    while (!simu_state.isTerminal())
         simu_state.generateNextState();
-        simu_count++;
-    }
-    return simu_state.quickEvaluate();
-    //return node->state.quickEvaluate();
+    if (simu_state.col == curCol)
+        return 1;
+    else
+        return -1;*/
+    return node->state.quickEvaluate();
 }
 
 //蒙特卡洛树搜索的Backpropagation阶段，输入前面获取需要expend的节点和新执行Action的reward，反馈给expend节点和上游所有节点并更新对应数据。
@@ -336,7 +340,17 @@ int main()
     Json::Value action;
 
     //黑棋开局不能下在天元
-    Node *best_child = bestChild(node, false);
+    Node *best_child = NULL;
+    int maxnum = 0;
+    for (int i = 0; i < (int)node->children.size(); i++)
+    {
+        Node *p = node->children[i];
+        if (p->visit_times > maxnum)
+        {
+            best_child = p;
+            maxnum = p->visit_times;
+        }
+    }
     if (x == -1)
     {
         double max_score = 2e-50;
@@ -345,7 +359,7 @@ int main()
             Node *p = node->children[i];
             if (p->state.current_board[4][4] == 1)
                 continue;
-            double score = p->quality_value / p->visit_times;
+            double score = p->visit_times;
             if (score > max_score)
             {
                 max_score = score;
@@ -368,7 +382,7 @@ int main()
     //ret["debug"] = buffer;
     Json::FastWriter writer;
     char buffer[4096];
-    sprintf(buffer, "MCTS节点数:%d,当前预估胜率:%.3f", node_count, ((double)(best_child->quality_value)) / ((double)best_child->visit_times) + 0.5);
+    sprintf(buffer, "MCTS节点数:%d", node_count);
     ret["debug"] = buffer;
     cout << writer.write(ret) << endl;
     //system("pause");

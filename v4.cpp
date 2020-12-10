@@ -3,6 +3,7 @@
 // 作者：AAA
 // 游戏信息：http://www.botzone.org/games#NoGo
 //v4 继承自v3 尝试在defaultPolicy中加入几步随机过程
+// 每加入一步都会使搜索节点数下降，但性能没有提升，反而下降，确信深度为王
 #include "jsoncpp/json.h"
 #include <cstdio>
 #include <cstring>
