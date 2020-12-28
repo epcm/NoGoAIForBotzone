@@ -14,7 +14,7 @@
 using namespace std;
 
 #define TIME_OUT_SET 0.98
-#define RANDOM_DEPTH 1
+#define RANDOM_DEPTH 6
 
 int board[9][9] = {0};
 int node_count = 0;
@@ -226,7 +226,7 @@ double defaultPolicy(Node *node)
     State simu_state = node->state;
     //int curCol = simu_state.col;
     int simu_count = 0;
-    while (simu_count < RANDOM_DEPTH && !simu_state.available_choices.empty())
+    while (simu_count < RANDOM_DEPTH )//&& !simu_state.available_choices.empty()
     {
         simu_state.generateNextState();
         simu_count++;

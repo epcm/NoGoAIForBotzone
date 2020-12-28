@@ -2,8 +2,15 @@
 // MCTS策略
 // 作者：AAA
 // 游戏信息：http://www.botzone.org/games#NoGo
-//v6 继承自v3 将bestchild改为最多访问的节点
+// {"x": -1, "y": -1}
+//v3.1.1 继承自v3.1 限制搜索宽度，从第一层之后每层限制在40个子节点
+
+#pragma GCC optimize("O2")
+#pragma GCC optimize("O3")
+#pragma GCC optimize("Ofast,no-stack-protector")
+
 #include "jsoncpp/json.h"
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <iostream>
@@ -13,6 +20,7 @@
 using namespace std;
 
 #define TIME_OUT_SET 0.98
+#define MAX_CHILDREN_NUM 40
 
 int board[9][9] = {0};
 int node_count = 0;
@@ -60,7 +68,9 @@ double State::quickEvaluate()
             if (judgeAvailable(i, j))
                 n2++;
     col = -col;
-    return (n2 - n1) / 81.0;
+    if (n1 == 0 && n2 == 0)
+        return 0;
+    return tanh(double(n2 - n1) / double(n1 + n2));
 }
 bool State::dfsAir(int fx, int fy)
 {
@@ -156,7 +166,8 @@ public:
 };
 bool Node::isAllExpanded()
 {
-    return state.available_choices.empty();
+    //return state.available_choices.empty();
+    return state.available_choices.empty() || this->children.size() >= MAX_CHILDREN_NUM;
 }
 
 //使用UCB算法，权衡exploration和exploitation后选择得分最高的子节点，注意如果是预测阶段直接选择当前Q值得分最高的。
@@ -318,6 +329,9 @@ int main()
         cout << endl;
     }*/
     node->state.getAviliableAction();
+    // 先把第一层全部展开
+    while(!node->isAllExpanded())
+        node->children.push_back(expand(node));
 
     //开始蒙特卡洛树搜索
     while (clock() - start < timeout)
@@ -340,17 +354,7 @@ int main()
     Json::Value action;
 
     //黑棋开局不能下在天元
-    Node *best_child = NULL;
-    int maxnum = 0;
-    for (int i = 0; i < (int)node->children.size(); i++)
-    {
-        Node *p = node->children[i];
-        if (p->visit_times > maxnum)
-        {
-            best_child = p;
-            maxnum = p->visit_times;
-        }
-    }
+    Node *best_child = bestChild(node, false);
     if (x == -1)
     {
         double max_score = 2e-50;
@@ -359,7 +363,7 @@ int main()
             Node *p = node->children[i];
             if (p->state.current_board[4][4] == 1)
                 continue;
-            double score = p->visit_times;
+            double score = p->quality_value / p->visit_times;
             if (score > max_score)
             {
                 max_score = score;
@@ -368,12 +372,15 @@ int main()
         }
     }
 
+    int resx = 0, resy = 0;
     for (int i = 0; i < 9; i++)
         for (int j = 0; j < 9; j++)
             if (board[i][j] != best_child->state.current_board[i][j])
             {
                 action["x"] = i;
                 action["y"] = j;
+                resx = i;
+                resy = j;
                 break;
             }
     ret["response"] = action;
@@ -382,7 +389,9 @@ int main()
     //ret["debug"] = buffer;
     Json::FastWriter writer;
     char buffer[4096];
-    sprintf(buffer, "MCTS节点数:%d", node_count);
+    node->state.current_board[resx][resy] = node->state.col;
+    double v = node->state.quickEvaluate();
+    sprintf(buffer, "???:%d,??:%.3f", node_count, -v * 81);
     ret["debug"] = buffer;
     cout << writer.write(ret) << endl;
     //system("pause");

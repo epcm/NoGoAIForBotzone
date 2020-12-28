@@ -2,7 +2,7 @@
 // MCTS策略
 // 作者：AAA
 // 游戏信息：http://www.botzone.org/games#NoGo
-//v6 继承自v3 将bestchild改为最多访问的节点
+//v7 继承自v3 更改评估函数，
 #include "jsoncpp/json.h"
 #include <cstdio>
 #include <cstring>
@@ -162,7 +162,7 @@ bool Node::isAllExpanded()
 //使用UCB算法，权衡exploration和exploitation后选择得分最高的子节点，注意如果是预测阶段直接选择当前Q值得分最高的。
 Node *bestChild(Node *node, bool is_explor)
 {
-    double max_score = -2e50; //参数开始设成了2e-50，难怪会返回NULL
+    double max_score = -2e50;//参数开始设成了2e-50，难怪会返回NULL
     Node *best_child = NULL;
     double C = 0.0;
     if (is_explor)
@@ -185,7 +185,7 @@ Node *expand(Node *node)
     Node *new_node = new Node;
     int i = rand() % node->state.available_choices.size();
     Action a = node->state.available_choices[i];
-    node->state.available_choices.erase(node->state.available_choices.begin() + i); //清除已经展开的节点
+    node->state.available_choices.erase(node->state.available_choices.begin()+i); //清除已经展开的节点
     *new_node = *node;
     new_node->state.col = -node->state.col;
     /*new_node->quality_value = 0.0;
@@ -340,17 +340,7 @@ int main()
     Json::Value action;
 
     //黑棋开局不能下在天元
-    Node *best_child = NULL;
-    int maxnum = 0;
-    for (int i = 0; i < (int)node->children.size(); i++)
-    {
-        Node *p = node->children[i];
-        if (p->visit_times > maxnum)
-        {
-            best_child = p;
-            maxnum = p->visit_times;
-        }
-    }
+    Node *best_child = bestChild(node, false);
     if (x == -1)
     {
         double max_score = 2e-50;
@@ -359,7 +349,7 @@ int main()
             Node *p = node->children[i];
             if (p->state.current_board[4][4] == 1)
                 continue;
-            double score = p->visit_times;
+            double score = p->quality_value / p->visit_times;
             if (score > max_score)
             {
                 max_score = score;
@@ -382,7 +372,7 @@ int main()
     //ret["debug"] = buffer;
     Json::FastWriter writer;
     char buffer[4096];
-    sprintf(buffer, "MCTS节点数:%d", node_count);
+    sprintf(buffer, "MCTS节点数:%d,当前预估胜率:%.3f", node_count, ((double)(best_child->quality_value)) / ((double)best_child->visit_times) + 0.5);
     ret["debug"] = buffer;
     cout << writer.write(ret) << endl;
     //system("pause");

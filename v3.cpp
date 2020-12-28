@@ -12,7 +12,7 @@
 #include <vector>
 using namespace std;
 
-#define TIME_OUT_SET 0.98
+#define TIME_OUT_SET 0.99
 
 int board[9][9] = {0};
 int node_count = 0;
@@ -358,12 +358,15 @@ int main()
         }
     }
 
+    int resx=0, resy=0;
     for (int i = 0; i < 9; i++)
         for (int j = 0; j < 9; j++)
             if (board[i][j] != best_child->state.current_board[i][j])
             {
                 action["x"] = i;
                 action["y"] = j;
+                resx = i;
+                resy = j;
                 break;
             }
     ret["response"] = action;
@@ -372,7 +375,9 @@ int main()
     //ret["debug"] = buffer;
     Json::FastWriter writer;
     char buffer[4096];
-    sprintf(buffer, "MCTS节点数:%d,当前预估胜率:%.3f", node_count, ((double)(best_child->quality_value)) / ((double)best_child->visit_times) + 0.5);
+    node->state.current_board[resx][resy] = node->state.col;
+    double v = node->state.quickEvaluate();
+    sprintf(buffer, "???:%d,??:%.3f", node_count, -v*81);
     ret["debug"] = buffer;
     cout << writer.write(ret) << endl;
     //system("pause");
