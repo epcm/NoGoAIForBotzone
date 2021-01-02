@@ -16,8 +16,8 @@
 #include <vector>
 using namespace std;
 
-#define TIME_OUT_SET 0.99
-#define EXPC 0
+#define TIME_OUT_SET 0.98
+#define EXPC 0.1
 
 int board[9][9] = {0};
 int node_count = 0;
@@ -65,7 +65,7 @@ double State::quickEvaluate()
             if (judgeAvailable(i, j))
                 n2++;
     col = -col;
-    return (n2 - n1) / 81.0;
+    return tanh(double(n2 - n1)/(n2+n1));
 }
 bool State::dfsAir(int fx, int fy)
 {
