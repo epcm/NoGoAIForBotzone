@@ -3,6 +3,10 @@
 // 作者：AAA
 // 游戏信息：http://www.botzone.org/games#NoGo
 //v3 继承自v1 expand节点选择改为随机法,简单的inline
+#pragma GCC optimize("O2")
+#pragma GCC optimize("O3")
+#pragma GCC optimize("Ofast,no-stack-protector")
+
 #include "jsoncpp/json.h"
 #include <cstdio>
 #include <cstring>
@@ -12,7 +16,7 @@
 #include <vector>
 using namespace std;
 
-#define TIME_OUT_SET 0.99
+#define TIME_OUT_SET 0.98
 
 int board[9][9] = {0};
 int node_count = 0;

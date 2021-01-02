@@ -2,15 +2,12 @@
 // MCTS策略
 // 作者：AAA
 // 游戏信息：http://www.botzone.org/games#NoGo
-// {"x": -1, "y": -1}
-//v3.1.1 继承自v3.1 限制搜索宽度，从第一层之后每层限制在40个子节点
-
-/*#pragma GCC optimize("O2")
+//v3.3 C调参
+#pragma GCC optimize("O2")
 #pragma GCC optimize("O3")
-#pragma GCC optimize("Ofast,no-stack-protector")*/
+#pragma GCC optimize("Ofast,no-stack-protector")
 
 #include "jsoncpp/json.h"
-#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <iostream>
@@ -19,8 +16,8 @@
 #include <vector>
 using namespace std;
 
-#define TIME_OUT_SET 0.98
-#define MAX_CHILDREN_NUM 50
+#define TIME_OUT_SET 0.99
+#define EXPC 0
 
 int board[9][9] = {0};
 int node_count = 0;
@@ -68,9 +65,7 @@ double State::quickEvaluate()
             if (judgeAvailable(i, j))
                 n2++;
     col = -col;
-    if (n1 == 0 && n2 == 0)
-        return 0;
-    return tanh(double(n2 - n1) / double(n1 + n2));
+    return (n2 - n1) / 81.0;
 }
 bool State::dfsAir(int fx, int fy)
 {
@@ -166,19 +161,18 @@ public:
 };
 bool Node::isAllExpanded()
 {
-    //return state.available_choices.empty();
-    return state.available_choices.empty() || this->children.size() >= MAX_CHILDREN_NUM;
+    return state.available_choices.empty();
 }
 
 //使用UCB算法，权衡exploration和exploitation后选择得分最高的子节点，注意如果是预测阶段直接选择当前Q值得分最高的。
 Node *bestChild(Node *node, bool is_explor)
 {
-    double max_score = -2e50; //参数开始设成了2e-50，难怪会返回NULL
+    double max_score = -2e50;//参数开始设成了2e-50，难怪会返回NULL
     Node *best_child = NULL;
     double C = 0.0;
     if (is_explor)
-        C = 1 / sqrt(2);
-    for (int i = 0; i < (int)(node->children.size()); i++) //加了1防止除0
+        C = EXPC;
+    for (int i = 0; i < (int)(node->children.size()); i++) //Key!!!!加了1防止除0
     {
         Node *p = node->children[i];
         double score = p->quality_value / (p->visit_times) + 2 * C * sqrt(log(2 * node->visit_times) / (p->visit_times));
@@ -196,7 +190,7 @@ Node *expand(Node *node)
     Node *new_node = new Node;
     int i = rand() % node->state.available_choices.size();
     Action a = node->state.available_choices[i];
-    node->state.available_choices.erase(node->state.available_choices.begin() + i); //清除已经展开的节点
+    node->state.available_choices.erase(node->state.available_choices.begin()+i); //清除已经展开的节点
     *new_node = *node;
     new_node->state.col = -node->state.col;
     /*new_node->quality_value = 0.0;
@@ -225,11 +219,9 @@ Node *treePolicy(Node *node)
         Node *p = bestChild(node, true);
         return treePolicy(p);
     }
-    /*while (node->isAllExpanded())
-    {
-        node = bestChild(node, true);
-    }*/
-    return expand(node);
+
+    else
+        return expand(node);
 }
 
 //Simulation阶段，从当前节点快速落子模拟运算至终局，返回reward
@@ -331,15 +323,6 @@ int main()
         cout << endl;
     }*/
     node->state.getAviliableAction();
-    // 先把第一层全部展开
-    int ChildNum = node->state.available_choices.size();
-    for (int i = 0; i < ChildNum; i++)
-    {
-        node_count++;
-        Node *expand_node = expand(node);
-        double reward = defaultPolicy(expand_node);
-        backup(expand_node, reward);
-    }
 
     //开始蒙特卡洛树搜索
     while (clock() - start < timeout)
@@ -380,7 +363,7 @@ int main()
         }
     }
 
-    int resx = 0, resy = 0;
+    int resx=0, resy=0;
     for (int i = 0; i < 9; i++)
         for (int j = 0; j < 9; j++)
             if (board[i][j] != best_child->state.current_board[i][j])
@@ -399,7 +382,7 @@ int main()
     char buffer[4096];
     node->state.current_board[resx][resy] = node->state.col;
     double v = node->state.quickEvaluate();
-    sprintf(buffer, "???:%d,??:%.3f", node_count, -v * 81);
+    sprintf(buffer, "???:%d,??:%.3f", node_count, -v*81);
     ret["debug"] = buffer;
     cout << writer.write(ret) << endl;
     //system("pause");

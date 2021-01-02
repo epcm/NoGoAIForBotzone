@@ -2,15 +2,12 @@
 // MCTS策略
 // 作者：AAA
 // 游戏信息：http://www.botzone.org/games#NoGo
-// {"x": -1, "y": -1}
-//v3.1.1 继承自v3.1 限制搜索宽度，从第一层之后每层限制在40个子节点
-
-/*#pragma GCC optimize("O2")
+//v3 继承自v3 在随机几步后评估
+#pragma GCC optimize("O2")
 #pragma GCC optimize("O3")
-#pragma GCC optimize("Ofast,no-stack-protector")*/
+#pragma GCC optimize("Ofast,no-stack-protector")
 
 #include "jsoncpp/json.h"
-#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <iostream>
@@ -19,11 +16,12 @@
 #include <vector>
 using namespace std;
 
-#define TIME_OUT_SET 0.98
-#define MAX_CHILDREN_NUM 50
+#define TIME_OUT_SET 0.99
+#define SIMUTIMES 2
 
 int board[9][9] = {0};
 int node_count = 0;
+int turnID;
 
 /******************规则部分**********************/
 bool dfs_air_visit[9][9] = {0};
@@ -68,9 +66,7 @@ double State::quickEvaluate()
             if (judgeAvailable(i, j))
                 n2++;
     col = -col;
-    if (n1 == 0 && n2 == 0)
-        return 0;
-    return tanh(double(n2 - n1) / double(n1 + n2));
+    return (n2 - n1) / 81.0;
 }
 bool State::dfsAir(int fx, int fy)
 {
@@ -123,11 +119,14 @@ bool State::judgeAvailable(int fx, int fy)
 
 bool State::isTerminal()
 {
-    for (int i = 0; i < 9; i++)
+    /*for (int i = 0; i < 9; i++)
         for (int j = 0; j < 9; j++)
             if (judgeAvailable(i, j))
                 return false;
-    return true;
+    return true;*/
+    if (available_choices.size() == 0)
+        return true;
+    return false;
 }
 void State::getAviliableAction()
 {
@@ -144,14 +143,15 @@ void State::getAviliableAction()
 }
 void State::generateNextState()
 {
-    if (available_choices.size() == 0) //修改
-        return;
-    int n = available_choices.size();
-    int i = rand() % n;
-    Action a = available_choices[i];
-    current_board[a.x][a.y] = col;
+    int i, j;
+    do
+    {
+        i = rand() % 9;
+        j = rand() % 9;
+    } while (!judgeAvailable(i, j));
+    current_board[i][j] = col;
     col = -col;
-    getAviliableAction();
+    //getAviliableAction();
 }
 
 class Node
@@ -166,8 +166,7 @@ public:
 };
 bool Node::isAllExpanded()
 {
-    //return state.available_choices.empty();
-    return state.available_choices.empty() || this->children.size() >= MAX_CHILDREN_NUM;
+    return state.available_choices.empty();
 }
 
 //使用UCB算法，权衡exploration和exploitation后选择得分最高的子节点，注意如果是预测阶段直接选择当前Q值得分最高的。
@@ -178,7 +177,7 @@ Node *bestChild(Node *node, bool is_explor)
     double C = 0.0;
     if (is_explor)
         C = 1 / sqrt(2);
-    for (int i = 0; i < (int)(node->children.size()); i++) //加了1防止除0
+    for (int i = 0; i < (int)(node->children.size()); i++) //Key!!!!加了1防止除0
     {
         Node *p = node->children[i];
         double score = p->quality_value / (p->visit_times) + 2 * C * sqrt(log(2 * node->visit_times) / (p->visit_times));
@@ -225,29 +224,26 @@ Node *treePolicy(Node *node)
         Node *p = bestChild(node, true);
         return treePolicy(p);
     }
-    /*while (node->isAllExpanded())
-    {
-        node = bestChild(node, true);
-    }*/
-    return expand(node);
+
+    else
+        return expand(node);
 }
 
 //Simulation阶段，从当前节点快速落子模拟运算至终局，返回reward
 inline double defaultPolicy(Node *node)
 {
-    /*State simu_state = node->state;
-    simu_state.col = node->state.col;
-    for (int i = 0; i < 9; i++)
-        for (int j = 0; j < 9; j++)
-            simu_state.current_board[i][j] = node->state.current_board[i][j];
-    simu_state.getAviliableAction();
-    int curCol = simu_state.col;
-    while (!simu_state.isTerminal())
-        simu_state.generateNextState();
-    if (simu_state.col == curCol)
-        return 1;
-    else
-        return -1;*/
+    // 在剩余位置多的时候跑模拟
+    if (node->state.available_choices.size() > 20)
+    {
+        State simu_state = node->state;
+        simu_state.col = node->state.col;
+        for (int i = 0; i < 9; i++)
+            for (int j = 0; j < 9; j++)
+                simu_state.current_board[i][j] = node->state.current_board[i][j];
+        for (int i = 0; i < SIMUTIMES; i++)
+            simu_state.generateNextState();
+        return simu_state.quickEvaluate();
+    }
     return node->state.quickEvaluate();
 }
 
@@ -299,7 +295,7 @@ int main()
 
     int color = node->state.col;
     // 分析自己收到的输入和自己过往的输出，并恢复状态
-    int turnID = input["responses"].size();
+    turnID = input["responses"].size();
     for (int i = 0; i < turnID; i++)
     {
         x = input["requests"][i]["x"].asInt(), y = input["requests"][i]["y"].asInt();
@@ -331,15 +327,6 @@ int main()
         cout << endl;
     }*/
     node->state.getAviliableAction();
-    // 先把第一层全部展开
-    int ChildNum = node->state.available_choices.size();
-    for (int i = 0; i < ChildNum; i++)
-    {
-        node_count++;
-        Node *expand_node = expand(node);
-        double reward = defaultPolicy(expand_node);
-        backup(expand_node, reward);
-    }
 
     //开始蒙特卡洛树搜索
     while (clock() - start < timeout)
@@ -365,16 +352,16 @@ int main()
     Node *best_child = bestChild(node, false);
     if (x == -1)
     {
-        double max_score = 2e-50;
+        double max_visit = 2e-50;
         for (int i = 0; i < (int)node->children.size(); i++)
         {
             Node *p = node->children[i];
             if (p->state.current_board[4][4] == 1)
                 continue;
-            double score = p->quality_value / p->visit_times;
-            if (score > max_score)
+            //double score = p->quality_value / p->visit_times;
+            if (p->visit_times > max_visit)
             {
-                max_score = score;
+                max_visit = p->visit_times;
                 best_child = p;
             }
         }

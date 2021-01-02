@@ -5,27 +5,29 @@
 // {"x": -1, "y": -1}
 //v3.1 继承自v3 改变估值函数，增加接近终局的估值权重
 
-#pragma GCC optimize("O2")
+/*#pragma GCC optimize("O2")
 #pragma GCC optimize("O3")
-#pragma GCC optimize("Ofast,no-stack-protector")
+#pragma GCC optimize("Ofast,no-stack-protector")*/
 
 #include "jsoncpp/json.h"
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <iostream>
+#include <queue>
 #include <random>
 #include <string>
 #include <vector>
-#include <cmath>
 using namespace std;
 
 #define TIME_OUT_SET 0.98
 
 int board[9][9] = {0};
 int node_count = 0;
+int turnID;
 
 /******************规则部分**********************/
-bool dfs_air_visit[9][9] = {0};
+int dfs_air_visit[9][9] = {0};
 const int cx[] = {-1, 0, 1, 0};
 const int cy[] = {0, -1, 0, 1};
 
@@ -46,7 +48,7 @@ class State
 public:
     int current_board[9][9] = {0};
     int col = 0;
-    vector<Action> available_choices;
+    deque<Action> available_choices;
     bool isTerminal(); //判断是否终局
     void getAviliableAction();
     void generateNextState(); //随机生成到下一状态
@@ -67,10 +69,10 @@ double State::quickEvaluate()
             if (judgeAvailable(i, j))
                 n2++;
     col = -col;
-    if(n1==0 && n2 == 0)
-        return 0;
-    return tanh(double(n2 - n1) / double(n1+n2));
+    return (n2 - n1) * pow(1.2, abs(n2 - n1)) * abs(n1 + n2 - 80);
+    //return n2 - n1;
 }
+
 bool State::dfsAir(int fx, int fy)
 {
     dfs_air_visit[fx][fy] = true;
@@ -141,7 +143,7 @@ void State::getAviliableAction()
                 available_choices.push_back(a);
             }
 }
-void State::generateNextState()
+/*void State::generateNextState()
 {
     if (available_choices.size() == 0) //修改
         return;
@@ -151,7 +153,7 @@ void State::generateNextState()
     current_board[a.x][a.y] = col;
     col = -col;
     getAviliableAction();
-}
+}*/
 
 class Node
 {
@@ -163,20 +165,20 @@ public:
     State state;
     bool isAllExpanded();
 };
-bool Node::isAllExpanded()
+inline bool Node::isAllExpanded()
 {
     return state.available_choices.empty();
 }
 
 //使用UCB算法，权衡exploration和exploitation后选择得分最高的子节点，注意如果是预测阶段直接选择当前Q值得分最高的。
-Node *bestChild(Node *node, bool is_explor)
+Node *bestChild(Node *&node, bool is_explor)
 {
-    double max_score = -2e50;//参数开始设成了2e-50，难怪会返回NULL
+    double max_score = -2e50; //参数开始设成了2e-50，难怪会返回NULL
     Node *best_child = NULL;
     double C = 0.0;
     if (is_explor)
-        C = 1 / sqrt(2);
-    for (int i = 0; i < (int)(node->children.size()); i++) //Key!!!!加了1防止除0
+        C = 0.7;
+    for (int i = 0; i < (int)(node->children.size()); i++) //加了1防止除0
     {
         Node *p = node->children[i];
         double score = p->quality_value / (p->visit_times) + 2 * C * sqrt(log(2 * node->visit_times) / (p->visit_times));
@@ -189,12 +191,12 @@ Node *bestChild(Node *node, bool is_explor)
     return best_child;
 }
 
-Node *expand(Node *node)
+Node *expand(Node *&node)
 {
     Node *new_node = new Node;
-    int i = rand() % node->state.available_choices.size();
-    Action a = node->state.available_choices[i];
-    node->state.available_choices.erase(node->state.available_choices.begin()+i); //清除已经展开的节点
+    //int i = rand() % node->state.available_choices.size();
+    Action a = node->state.available_choices.front();
+    node->state.available_choices.pop_front(); //清除已经展开的节点
     *new_node = *node;
     new_node->state.col = -node->state.col;
     /*new_node->quality_value = 0.0;
@@ -295,7 +297,7 @@ int main()
 
     int color = node->state.col;
     // 分析自己收到的输入和自己过往的输出，并恢复状态
-    int turnID = input["responses"].size();
+    turnID = input["responses"].size();
     for (int i = 0; i < turnID; i++)
     {
         x = input["requests"][i]["x"].asInt(), y = input["requests"][i]["y"].asInt();
@@ -367,7 +369,7 @@ int main()
         }
     }
 
-    int resx=0, resy=0;
+    int resx = 0, resy = 0;
     for (int i = 0; i < 9; i++)
         for (int j = 0; j < 9; j++)
             if (board[i][j] != best_child->state.current_board[i][j])
@@ -385,8 +387,20 @@ int main()
     Json::FastWriter writer;
     char buffer[4096];
     node->state.current_board[resx][resy] = node->state.col;
+    // 调试用数据
     double v = node->state.quickEvaluate();
-    sprintf(buffer, "???:%d,??:%.3f", node_count, -v*81);
+    int n1 = 0, n2 = 0;
+    for (int i = 0; i < 9; i++)
+        for (int j = 0; j < 9; j++)
+            if (node->state.judgeAvailable(i, j))
+                n1++;
+    node->state.col = -node->state.col;
+    for (int i = 0; i < 9; i++)
+        for (int j = 0; j < 9; j++)
+            if (node->state.judgeAvailable(i, j))
+                n2++;
+    node->state.col = -node->state.col;
+    sprintf(buffer, "???:%d,??:%.3f,self:%d,else:%d", node_count, -v * 81, n1, n2);
     ret["debug"] = buffer;
     cout << writer.write(ret) << endl;
     //system("pause");
