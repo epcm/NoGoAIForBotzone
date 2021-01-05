@@ -72,7 +72,7 @@ Node::Node()
 
 double Node::quickEvaluate()
 {
-    int n1 = 0, n2 = 0;
+    int n=0;
     for (int i = 0; i < 9; i++)
         for (int j = 0; j < 9; j++)
         {
@@ -80,14 +80,15 @@ double Node::quickEvaluate()
             col = -col;
             bool f2 = judgeAvailable(i, j);
             col = -col;
-            if (f1 && !f2)
-                n1 += 1;
-            else if (!f1 && f2)
-                n2 += 1;
+            if((f1 && f2)||(!f1 && !f2))
+                continue;
+            else if (f1)
+                n--;
+            else if (f2)
+                n++;
         }
-    if(turnID < 6)
-        n1 += 0.5 * col * (current_board[0][0] + current_board[0][8] + current_board[8][0] + current_board[8][8]);
-    return n2 - n1;
+   
+    return n;
 }
 
 bool Node::dfsAir(int fx, int fy)

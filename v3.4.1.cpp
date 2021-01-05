@@ -2,7 +2,7 @@
 // MCTS策略
 // 作者：AAA
 // 游戏信息：http://www.botzone.org/games#NoGo
-//v3.4 继承自v3 重构代码
+//v3.4.1 继承自v3.4 给边角增加权重
 #pragma GCC optimize("O2")
 #pragma GCC optimize("O3")
 #pragma GCC optimize("Ofast,no-stack-protector")
@@ -45,14 +45,15 @@ class Node
 public:
     Node();
     signed char current_board[9][9] = {0};
-    int col = 0;
+    signed char col = 0;
     Node *parent = NULL;
     Node *children[81];
     int visit_times = 0;
     int countChildrenNum = 0;
     int maxChildrenNum = 0;
     double quality_value = 0.0;
-    int available_choices[81];
+    int available_choices[81] = {0};
+    //bool deadPos[81] = {0};
     void getAviliableAction();           //得到可行的行动
     bool dfsAir(int fx, int fy);         //判断是否有气
     bool judgeAvailable(int fx, int fy); //判断是否可下
@@ -80,13 +81,38 @@ double Node::quickEvaluate()
             col = -col;
             bool f2 = judgeAvailable(i, j);
             col = -col;
-            if (f1 && !f2)
-                n1 += 1;
-            else if (!f1 && f2)
-                n2 += 1;
+            if (f1)
+            {
+                n1++;
+            }
+            if (f2)
+            {
+                n2++;
+            }
+            //if (current_board[i][j] == 0 && !f1 && !f2)
+            //  deadPos[i * 9 + j] = true;
         }
-    if(turnID < 6)
+    if (n1+n2>155)
         n1 += 0.5 * col * (current_board[0][0] + current_board[0][8] + current_board[8][0] + current_board[8][8]);
+    /*for (int i = 1; i < 8; i++)
+    {
+        if (current_board[0][i] == 0 && current_board[0][i - 1] == col && current_board[0][i + 1] == col)
+            n1 += 0.5;
+        if (current_board[i][0] == 0 && current_board[i - 1][0] == col && current_board[i + 1][0] == col)
+            n1 += 0.5;
+        if (current_board[8][i] == 0 && current_board[8][i - 1] == col && current_board[8][i - 1] == col)
+            n1 += 0.5;
+        if (current_board[i][8] == 0 && current_board[i - 1][8] == col && current_board[i - 1][8] == col)
+            n1 += 0.5;
+        if (current_board[0][i] == 0 && current_board[0][i - 1] == -col && current_board[0][i + 1] == -col)
+            n2 += 0.5;
+        if (current_board[i][0] == 0 && current_board[i - 1][0] == -col && current_board[i + 1][0] == col)
+            n2 += 0.5;
+        if (current_board[8][i] == 0 && current_board[8][i - 1] == col && current_board[8][i - 1] == col)
+            n2 += 0.5;
+        if (current_board[i][8] == 0 && current_board[i - 1][8] == col && current_board[i - 1][8] == col)
+            n2 += 0.5;
+    }*/
     return n2 - n1;
 }
 
@@ -105,7 +131,6 @@ bool Node::dfsAir(int fx, int fy)
                 if (dfsAir(dx, dy))
                 {
                     flag = true;
-                    
                 }
         }
     }
@@ -114,7 +139,7 @@ bool Node::dfsAir(int fx, int fy)
 
 bool Node::judgeAvailable(int fx, int fy)
 {
-    if (current_board[fx][fy])
+    if (current_board[fx][fy]) //(current_board[fx][fy] || deadPos[fx * 9 + fy])
         return false;
     current_board[fx][fy] = col;
     memset(dfs_air_visit, 0, sizeof(dfs_air_visit));
@@ -183,7 +208,10 @@ Node *Node::expand()
     new_node->parent = this;
     for (int i = 0; i < 9; i++)
         for (int j = 0; j < 9; j++)
+        {
             new_node->current_board[i][j] = current_board[i][j];
+            //new_node->deadPos[i * 9 + j] = deadPos[i * 9 + j];
+        }
     new_node->col = -col;
     new_node->current_board[x][y] = col;
     new_node->getAviliableAction();
@@ -301,19 +329,36 @@ int main()
     Json::Value ret;
     Json::Value action;
 
-    Node *best_child = node->bestChild(0);
+    Node *best_child = NULL; //= node->bestChild(0);
+    int maxnum = 0;
+    for (int i = 0; i < node->countChildrenNum; i++)
+    {
+        if (node->children[i]->visit_times > maxnum)
+        {
+            maxnum = node->children[i]->visit_times;
+            best_child = node->children[i];
+        }
+    }
+    int resx = 0, resy = 0;
     for (int i = 0; i < 9; i++)
         for (int j = 0; j < 9; j++)
             if (board[i][j] != best_child->current_board[i][j])
             {
                 action["x"] = i;
                 action["y"] = j;
+                resx = i;
+                resy = j;
                 break;
             }
     ret["response"] = action;
+    //char buffer[4096];
+    //sprintf(buffer, "MCTS节点数:%d,当前预估胜率:%.3f", node_count, ((double)(root.children[maxI]->q)) / ((double)root.children[maxI]->n));
+    //ret["debug"] = buffer;
     Json::FastWriter writer;
     char buffer[4096];
-    sprintf(buffer, "???:%d", node_count);
+    node->current_board[resx][resy] = node->col;
+    double v = node->quickEvaluate();
+    sprintf(buffer, "???:%d,??:%.3f", node_count, -v * 81);
     ret["debug"] = buffer;
     cout << writer.write(ret) << endl;
     //system("pause");

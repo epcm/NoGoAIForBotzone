@@ -2,7 +2,8 @@
 // MCTS策略
 // 作者：AAA
 // 游戏信息：http://www.botzone.org/games#NoGo
-//v3.4 继承自v3 重构代码
+// v3.4 继承自v3 重构代码
+// Final
 #pragma GCC optimize("O2")
 #pragma GCC optimize("O3")
 #pragma GCC optimize("Ofast,no-stack-protector")
@@ -21,7 +22,6 @@ using namespace std;
 
 int board[9][9] = {0};
 int node_count = 0;
-int turnID;
 
 /******************规则部分**********************/
 bool dfs_air_visit[9][9] = {0};
@@ -81,12 +81,10 @@ double Node::quickEvaluate()
             bool f2 = judgeAvailable(i, j);
             col = -col;
             if (f1 && !f2)
-                n1 += 1;
+                n1 ++;
             else if (!f1 && f2)
-                n2 += 1;
+                n2 ++;
         }
-    if(turnID < 6)
-        n1 += 0.5 * col * (current_board[0][0] + current_board[0][8] + current_board[8][0] + current_board[8][8]);
     return n2 - n1;
 }
 
@@ -262,7 +260,7 @@ int main()
 
     int color = node->col;
     // 分析自己收到的输入和自己过往的输出，并恢复状态
-    turnID = input["responses"].size();
+    int turnID = input["responses"].size();
     for (int i = 0; i < turnID; i++)
     {
         x = input["requests"][i]["x"].asInt(), y = input["requests"][i]["y"].asInt();
@@ -312,9 +310,9 @@ int main()
             }
     ret["response"] = action;
     Json::FastWriter writer;
-    char buffer[4096];
-    sprintf(buffer, "???:%d", node_count);
-    ret["debug"] = buffer;
+    //char buffer[4096];
+    //sprintf(buffer, "???:%d,??:%.3f", node_count, -v * 81);
+    //ret["debug"] = buffer;
     cout << writer.write(ret) << endl;
     //system("pause");
     return 0;
