@@ -23,14 +23,12 @@ using namespace std;
 int board[9][9] = {0};
 int node_count = 0;
 
-/******************规则部分**********************/
 bool dfs_air_visit[9][9] = {0};
 const int cx[] = {-1, 0, 1, 0};
 const int cy[] = {0, -1, 0, 1};
 
 inline bool inBorder(int x, int y) { return x >= 0 && y >= 0 && x < 9 && y < 9; }
 
-/*******************MCTS实现********************/
 
 struct Action
 {
@@ -310,10 +308,12 @@ int main()
             }
     ret["response"] = action;
     Json::FastWriter writer;
-    //char buffer[4096];
-    //sprintf(buffer, "???:%d,??:%.3f", node_count, -v * 81);
-    //ret["debug"] = buffer;
+    char buffer[4096];
+    sprintf(buffer, "???:%d", node_count);
+    ret["debug"] = buffer;
     cout << writer.write(ret) << endl;
     //system("pause");
     return 0;
 }
+
+

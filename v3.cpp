@@ -379,9 +379,7 @@ int main()
     //ret["debug"] = buffer;
     Json::FastWriter writer;
     char buffer[4096];
-    node->state.current_board[resx][resy] = node->state.col;
-    double v = node->state.quickEvaluate();
-    sprintf(buffer, "???:%d,??:%.3f", node_count, -v*81);
+    sprintf(buffer, "???:%d", node_count);
     ret["debug"] = buffer;
     cout << writer.write(ret) << endl;
     //system("pause");

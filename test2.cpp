@@ -2,7 +2,8 @@
 // MCTS策略
 // 作者：AAA
 // 游戏信息：http://www.botzone.org/games#NoGo
-//v3.3 C调参
+// v3.4 继承自v3 重构代码
+// Final {"x":-1, "y":-1}
 #pragma GCC optimize("O2")
 #pragma GCC optimize("O3")
 #pragma GCC optimize("Ofast,no-stack-protector")
@@ -16,8 +17,8 @@
 #include <vector>
 using namespace std;
 
-#define TIME_OUT_SET 0.99
-#define EXPC 0.7
+#define TIME_OUT_SET 0.98
+#define EXPLORE 0.1
 
 int board[9][9] = {0};
 int node_count = 0;
@@ -37,37 +38,57 @@ struct Action
     int y = -1;
 };
 
-class State
+class Node
 {
     //Node的棋盘状态记录：包括评估值current_value,盘面current_board
     //实现有判断是否达terminal；simulation阶段的单步default policy
 public:
-    int current_board[9][9] = {0};
+    Node();
+    signed char current_board[9][9] = {0};
     int col = 0;
-    vector<Action> available_choices;
-    bool isTerminal(); //判断是否终局
-    void getAviliableAction();
-    void generateNextState(); //随机生成到下一状态
-    bool dfsAir(int fx, int fy);
-    bool judgeAvailable(int fx, int fy);
-    double quickEvaluate();
+    Node *parent = NULL;
+    Node *children[81];
+    int visit_times = 0;
+    int countChildrenNum = 0;
+    int maxChildrenNum = 0;
+    double quality_value = 0.0;
+    int available_choices[81];
+    void getAviliableAction();           //得到可行的行动
+    bool dfsAir(int fx, int fy);         //判断是否有气
+    bool judgeAvailable(int fx, int fy); //判断是否可下
+    double quickEvaluate();              //快速估值
+    Node *bestChild(double C);
+    Node *expand();
+    Node *treePolicy();
+    double defaultPolicy();
+    void backup(double reward);
 };
-double State::quickEvaluate()
+
+Node::Node()
+{
+    memset(current_board, 0, sizeof(current_board));
+    memset(available_choices, 0, sizeof(available_choices));
+}
+
+double Node::quickEvaluate()
 {
     int n1 = 0, n2 = 0;
     for (int i = 0; i < 9; i++)
         for (int j = 0; j < 9; j++)
-            if (judgeAvailable(i, j))
-                n1++;
-    col = -col;
-    for (int i = 0; i < 9; i++)
-        for (int j = 0; j < 9; j++)
-            if (judgeAvailable(i, j))
-                n2++;
-    col = -col;
-    return (n2 - n1) / 81.0;
+        {
+            bool f1 = judgeAvailable(i, j);
+            col = -col;
+            bool f2 = judgeAvailable(i, j);
+            col = -col;
+            if (f1 && !f2)
+                n1 ++;
+            else if (!f1 && f2)
+                n2 ++;
+        }
+    return n2 - n1;
 }
-bool State::dfsAir(int fx, int fy)
+
+bool Node::dfsAir(int fx, int fy)
 {
     dfs_air_visit[fx][fy] = true;
     bool flag = false;
@@ -80,13 +101,16 @@ bool State::dfsAir(int fx, int fy)
                 flag = true;
             if (current_board[dx][dy] == current_board[fx][fy] && !dfs_air_visit[dx][dy])
                 if (dfsAir(dx, dy))
+                {
                     flag = true;
+                    
+                }
         }
     }
     return flag;
 }
 
-bool State::judgeAvailable(int fx, int fy)
+bool Node::judgeAvailable(int fx, int fy)
 {
     if (current_board[fx][fy])
         return false;
@@ -116,66 +140,27 @@ bool State::judgeAvailable(int fx, int fy)
     return true;
 }
 
-bool State::isTerminal()
+void Node::getAviliableAction()
 {
-    for (int i = 0; i < 9; i++)
-        for (int j = 0; j < 9; j++)
-            if (judgeAvailable(i, j))
-                return false;
-    return true;
-}
-void State::getAviliableAction()
-{
-    available_choices.clear();
+    memset(available_choices, 0, sizeof(available_choices));
     for (int i = 0; i < 9; i++)
         for (int j = 0; j < 9; j++)
             if (judgeAvailable(i, j))
             {
-                Action a;
-                a.x = i;
-                a.y = j;
-                available_choices.push_back(a);
+                int act = i * 9 + j;
+                available_choices[maxChildrenNum++] = act;
             }
-}
-void State::generateNextState()
-{
-    if (available_choices.size() == 0) //修改
-        return;
-    int n = available_choices.size();
-    int i = rand() % n;
-    Action a = available_choices[i];
-    current_board[a.x][a.y] = col;
-    col = -col;
-    getAviliableAction();
-}
-
-class Node
-{
-public:
-    Node *parent = NULL;
-    vector<Node *> children;
-    int visit_times = 0;
-    double quality_value = 0.0;
-    State state;
-    bool isAllExpanded();
-};
-bool Node::isAllExpanded()
-{
-    return state.available_choices.empty();
 }
 
 //使用UCB算法，权衡exploration和exploitation后选择得分最高的子节点，注意如果是预测阶段直接选择当前Q值得分最高的。
-Node *bestChild(Node *node, bool is_explor)
+Node *Node::bestChild(double C)
 {
-    double max_score = -2e50;//参数开始设成了2e-50，难怪会返回NULL
+    double max_score = -2e50; //参数开始设成了2e-50，难怪会返回NULL
     Node *best_child = NULL;
-    double C = 0.0;
-    if (is_explor)
-        C = EXPC;
-    for (int i = 0; i < (int)(node->children.size()); i++) //Key!!!!加了1防止除0
+    for (int i = 0; i < countChildrenNum; i++)
     {
-        Node *p = node->children[i];
-        double score = p->quality_value / (p->visit_times) + 2 * C * sqrt(log(2 * node->visit_times) / (p->visit_times));
+        Node *p = children[i];
+        double score = p->quality_value / (p->visit_times) + 2 * C * sqrt(log(2 * visit_times) / (p->visit_times));
         if (score > max_score)
         {
             max_score = score;
@@ -185,68 +170,52 @@ Node *bestChild(Node *node, bool is_explor)
     return best_child;
 }
 
-Node *expand(Node *node)
+Node *Node::expand()
 {
+
+    int a = available_choices[countChildrenNum];
+    int x = a / 9;
+    int y = a % 9;
     Node *new_node = new Node;
-    int i = rand() % node->state.available_choices.size();
-    Action a = node->state.available_choices[i];
-    node->state.available_choices.erase(node->state.available_choices.begin()+i); //清除已经展开的节点
-    *new_node = *node;
-    new_node->state.col = -node->state.col;
-    /*new_node->quality_value = 0.0;
-    new_node->visit_times = 0;
+    children[countChildrenNum++] = new_node;
+    new_node->parent = this;
     for (int i = 0; i < 9; i++)
         for (int j = 0; j < 9; j++)
-            new_node->state.current_board[i][j] = node->state.current_board[i][j];*/
-    new_node->state.current_board[a.x][a.y] = node->state.col;
-    new_node->state.getAviliableAction();
-    new_node->parent = node;
-    node->children.push_back(new_node);
+            new_node->current_board[i][j] = current_board[i][j];
+    new_node->col = -col;
+    new_node->current_board[x][y] = col;
+    new_node->getAviliableAction();
     return new_node;
 }
 
-Node *treePolicy(Node *node)
+Node *Node::treePolicy()
 {
     //Selection与Expansion阶段。传入当前需要开始搜索的节点，根据UCB1值返回最好的需要expend的节点，注意如果节点是叶子结点直接返回。
     //基本策略是先找当前未选择过的子节点，如果有多个则随机选。如果都选择过就找权衡过exploration/exploitation的UCB值最大的，如果UCB值相等则随机选。
-    if (node->state.available_choices.empty() && node->children.empty()) //当treePolicy到达叶节点时(node->state.available_choices.empty() && node->children.empty())
+    if (maxChildrenNum == 0) //当treePolicy到达叶节点时(node->state.available_choices.empty() && node->children.empty())
     {
         //cout << "leaf";
-        return node;
+        return this;
     }
-    if (node->isAllExpanded())
+    if (countChildrenNum >= maxChildrenNum)
     {
-        Node *p = bestChild(node, true);
-        return treePolicy(p);
+        Node *p = bestChild(EXPLORE);
+        return p->treePolicy();
     }
-
     else
-        return expand(node);
+        return expand();
 }
 
 //Simulation阶段，从当前节点快速落子模拟运算至终局，返回reward
-inline double defaultPolicy(Node *node)
+double Node::defaultPolicy()
 {
-    /*State simu_state = node->state;
-    simu_state.col = node->state.col;
-    for (int i = 0; i < 9; i++)
-        for (int j = 0; j < 9; j++)
-            simu_state.current_board[i][j] = node->state.current_board[i][j];
-    simu_state.getAviliableAction();
-    int curCol = simu_state.col;
-    while (!simu_state.isTerminal())
-        simu_state.generateNextState();
-    if (simu_state.col == curCol)
-        return 1;
-    else
-        return -1;*/
-    return node->state.quickEvaluate();
+    return quickEvaluate();
 }
 
 //蒙特卡洛树搜索的Backpropagation阶段，输入前面获取需要expend的节点和新执行Action的reward，反馈给expend节点和上游所有节点并更新对应数据。
-void backup(Node *node, double reward)
+void Node::backup(double reward)
 {
-    Node *p = node;
+    Node *p = this;
     while (p)
     {
         p->visit_times++;
@@ -285,11 +254,11 @@ int main()
     int first = 0;
     Node *node = new Node;
     if (input["requests"][first]["x"].asInt() == -1) //确定颜色
-        node->state.col = 1;                         //黑棋
+        node->col = 1;                               //黑棋
     else
-        node->state.col = -1;
+        node->col = -1;
 
-    int color = node->state.col;
+    int color = node->col;
     // 分析自己收到的输入和自己过往的输出，并恢复状态
     int turnID = input["responses"].size();
     for (int i = 0; i < turnID; i++)
@@ -314,75 +283,35 @@ int main()
 
     for (int i = 0; i < 9; i++) //载入棋盘
         for (int j = 0; j < 9; j++)
-            node->state.current_board[i][j] = board[i][j];
-    /*//输出棋盘调试
-    for (int i = 0; i < 9; i++) //载入棋盘
-    {
-        for (int j = 0; j < 9; j++)
-             printf("%3d", node->state.current_board[j][i]) ;
-        cout << endl;
-    }*/
-    node->state.getAviliableAction();
+            node->current_board[i][j] = board[i][j];
+    node->getAviliableAction();
 
     //开始蒙特卡洛树搜索
     while (clock() - start < timeout)
     {
-        /*if(clock()%50==0)
-        {
-            cout << endl;
-            for(auto p:node->children)
-                cout << p->quality_value << '&' << p->visit_times << ' ';
-        }*/
-        //cout << "cal\n";
         node_count++;
-        Node *expand_node = treePolicy(node);
-        double reward = defaultPolicy(expand_node);
-        backup(expand_node, reward);
+        Node *expand_node = node->treePolicy();
+        double reward = expand_node-> quickEvaluate();
+        expand_node->backup(reward);
     }
 
     //输出结果
     Json::Value ret;
     Json::Value action;
 
-    //黑棋开局不能下在天元
-    Node *best_child = bestChild(node, false);
-    if (x == -1)
-    {
-        double max_score = 2e-50;
-        for (int i = 0; i < (int)node->children.size(); i++)
-        {
-            Node *p = node->children[i];
-            if (p->state.current_board[4][4] == 1)
-                continue;
-            double score = p->quality_value / p->visit_times;
-            if (score > max_score)
-            {
-                max_score = score;
-                best_child = p;
-            }
-        }
-    }
-
-    int resx=0, resy=0;
+    Node *best_child = node->bestChild(0);
     for (int i = 0; i < 9; i++)
         for (int j = 0; j < 9; j++)
-            if (board[i][j] != best_child->state.current_board[i][j])
+            if (board[i][j] != best_child->current_board[i][j])
             {
                 action["x"] = i;
                 action["y"] = j;
-                resx = i;
-                resy = j;
                 break;
             }
     ret["response"] = action;
-    //char buffer[4096];
-    //sprintf(buffer, "MCTS节点数:%d,当前预估胜率:%.3f", node_count, ((double)(root.children[maxI]->q)) / ((double)root.children[maxI]->n));
-    //ret["debug"] = buffer;
     Json::FastWriter writer;
     char buffer[4096];
-    node->state.current_board[resx][resy] = node->state.col;
-    double v = node->state.quickEvaluate();
-    sprintf(buffer, "???:%d,??:%.3f", node_count, -v*81);
+    sprintf(buffer, "???:%d", node_count);
     ret["debug"] = buffer;
     cout << writer.write(ret) << endl;
     //system("pause");
